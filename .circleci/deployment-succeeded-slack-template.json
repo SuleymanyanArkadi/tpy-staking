@@ -1,0 +1,31 @@
+{
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "Solidity contracts have been successfully deployed and verified on BSC Testnet network"
+      }
+    }
+  ],
+  "attachments": [
+    {
+      "color": "#36a64f",
+      "blocks": [
+        {
+          "type": "section",
+          "fields": [
+            {
+              "type": "mrkdwn",
+              "text": "<https://bitbucket.org/exiotech/${CIRCLE_PROJECT_REPONAME}/commits/${CIRCLE_SHA1}|_${GIT_COMMIT_DESC}_>"
+            },
+            {
+              "type": "mrkdwn",
+              "text": "*Branch:*${CIRCLE_BRANCH}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

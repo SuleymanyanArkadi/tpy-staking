@@ -1,0 +1,146 @@
+version: 2.1
+
+orbs:
+  slack: circleci/slack@4.7.1
+
+parameters:
+  RUN_TESTNET_DEPLOYMENT:
+    type: boolean
+    default: false
+
+commands:
+  init:
+    steps:
+      - when:
+          condition:
+            not:
+              or:
+                - equal: [master, << pipeline.git.branch >>]
+                - equal: [dev, << pipeline.git.branch >>]
+          steps:
+            - run:
+                name: Check if should run
+                command: |
+                  if [[ -z "$CIRCLE_PULL_REQUESTS" ]]; then 
+                    echo "Is not a pull request. Canceling the workflow..."
+                    curl --request POST \
+                      --url https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/cancel \
+                      --header "Circle-Token: ${CIRCLE_TOKEN}"
+                  fi
+      - run: sudo apt install libsecret-1-dev libusb-1.0-0-dev libudev-dev
+      - checkout
+      - run: yarn install --frozen-lockfile
+
+jobs:
+  hardhat_test:
+    docker:
+      - image: circleci/node:16
+    steps:
+      - init
+      - run:
+          name: hardhat test
+          command: npm run test
+    resource_class: medium
+
+  security_checks:
+    docker:
+      - image: circleci/node:16
+    steps:
+      - init
+      - run:
+          name: solidity linter
+          command: npm run solhint
+      - run:
+          name: solidity size check
+          command: npm run size-contracts
+      - run:
+          name: javascript linter
+          command: npm run eslint
+      - run:
+          name: solidity prettier
+          command: |
+            npm run prettier:solidity
+            git diff --exit-code
+      - run:
+          name: js prettier
+          command: |
+            npm run eslint:fix
+            git diff --exit-code
+    resource_class: small
+
+  slither_audit:
+    docker:
+      - image: cimg/python:3.10-node
+    steps:
+      - checkout
+      - run: sudo apt update
+      - run: sudo apt install -y libsecret-1-dev libusb-1.0-0-dev libudev-dev
+      - run: pip install slither-analyzer
+      - run: yarn
+      - run: yarn slither
+    resource_class: medium
+
+  coverage:
+    docker:
+      - image: circleci/node:16
+    steps:
+      - init
+      - run:
+          name: solidity coverage
+          command: yarn coverage
+      - run:
+          name: send to Codecov
+          command: npx codecov
+      - store_artifacts:
+          path: ./coverage
+    resource_class: medium+
+  deploy_bsc_testnet_and_verify:
+    docker:
+      - image: circleci/node:16
+    steps:
+      - init
+      - run:
+          name: Deploy testnet
+          command: npm run deploy:bsc-testnet
+      - run:
+          name: Verify on testnet
+          command: npm run verify:bsc-testnet
+      - run:
+          name: setup on testnet
+          command: npx hardhat setup --router "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
+      - run:
+          name: Set Common Environment Variables
+          command: |
+            echo 'export DEPLOYMENT_SUCCEEDED_SLACK_TEMPLATE=$(cat .circleci/deployment-succeeded-slack-template.json)' >> $BASH_ENV
+      - run: env
+      - slack/notify:
+          channel: 'bsc-universe'
+          template: DEPLOYMENT_SUCCEEDED_SLACK_TEMPLATE
+          event: pass
+    resource_class: medium
+
+workflows:
+  version: 2
+  build-test-check:
+    jobs:
+      - hardhat_test
+      - slither_audit
+      - coverage
+      # - coverage:
+          # requires:
+          #   - should_run_heavy_tests?
+      - security_checks
+      # - should_run_heavy_tests?:
+      #     type: approval
+      #     filters:
+      #       branches:
+      #         ignore: dev
+
+  tests_after_pr_merged:
+    jobs:
+      - deploy_bsc_testnet_and_verify:
+          context:
+            - slack
+          filters:
+            branches:
+              only: [dev, master]
