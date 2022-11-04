@@ -13,7 +13,7 @@
 		"node": "npx hardhat node --no-deploy",
 		"eslint": "npx eslint deploy/**/*.js test/**/*.js tasks/**/*.js utils/**/*.js",
 		"eslint:fix": "npx eslint --fix deploy/**/*.js test/**/*.js tasks/**/*.js utils/**/*.js",
-		"solhint": "solhint contracts/**/*.sol",
+		"solhint": "solhint contracts/*.sol",
 		"size-contracts": "npx hardhat size-contracts",
 		"prettier:solidity": "./node_modules/.bin/prettier --write 'contracts/**/*.sol'",
 		"slither": "HARDHAT_DEPENDENCY_COMPILER_KEEP=true slither . --filter-paths \"node_modules/@chainlink|node_modules/@openzeppelin|node_modules/@uniswap|contracts/mocks|contracts/hardhat-dependency-compiler\" --solc-remaps \"@chainlink/=$(pwd)/node_modules/@chainlink/ @openzeppelin/=$(pwd)/node_modules/@openzeppelin/ @uniswap/=$(pwd)/node_modules/@uniswap/\" && rm -rf contracts/hardhat-dependency-compiler",
@@ -67,12 +67,11 @@
 		"solhint": "^3.3.6",
 		"solhint-plugin-prettier": "^0.0.5",
 		"solidity-coverage": "^0.7.17",
+		"tenderly": "0.0.2",
 		"typechain": "^5.0.0",
 		"web3": "^1.7.0"
 	},
 	"dependencies": {
-		"@uniswap/v2-core": "^1.0.1",
-		"@uniswap/v2-periphery": "^1.1.0-beta.0",
 		"ethereumjs-util": "^7.1.0",
 		"hardhat-local-networks-config-plugin": "^0.0.6",
 		"web3-utils": "^1.6.1"
