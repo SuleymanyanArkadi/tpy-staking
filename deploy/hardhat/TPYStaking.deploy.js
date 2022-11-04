@@ -5,7 +5,7 @@ module.exports = async ({ deployments: { deploy }, ethers: { getNamedSigners, ge
 
 	await deploy("TPYStaking", {
 		from: deployer.address,
-		contract: "TPYStaking",
+		contract: "TPYStakingMock",
 		args: [token.address],
 		log: true
 	});
