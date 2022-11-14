@@ -16,7 +16,7 @@
 		"solhint": "solhint contracts/*.sol",
 		"size-contracts": "npx hardhat size-contracts",
 		"prettier:solidity": "./node_modules/.bin/prettier --write 'contracts/**/*.sol'",
-		"slither": "HARDHAT_DEPENDENCY_COMPILER_KEEP=true slither . --filter-paths \"node_modules/@chainlink|node_modules/@openzeppelin|node_modules/@uniswap|contracts/mocks|contracts/hardhat-dependency-compiler\" --solc-remaps \"@chainlink/=$(pwd)/node_modules/@chainlink/ @openzeppelin/=$(pwd)/node_modules/@openzeppelin/ @uniswap/=$(pwd)/node_modules/@uniswap/\" && rm -rf contracts/hardhat-dependency-compiler",
+		"slither": "HARDHAT_DEPENDENCY_COMPILER_KEEP=true slither . && rm -rf contracts/hardhat-dependency-compiler",
 		"prepare": "husky install"
 	},
 	"devDependencies": {

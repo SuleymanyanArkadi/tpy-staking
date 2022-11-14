@@ -8,61 +8,166 @@ import "hardhat/console.sol";
 
 contract TPYStaking {
     struct PoolInfo {
+        bool isPaused;
         uint256 lockPeriod;
         uint256 apy;
         uint256 totalStakes;
+        uint256 pauseCheckpoint;
     }
 
+    /**
+     * @notice Info of each stake
+     * @param amount: amount of user's stake
+     * @param checkpoint: timestamp of user's last action
+     * @param releaseCheckpoint: timestamp of passing the lock period
+     */
     struct UserStake {
         uint256 amount;
         uint256 checkpoint;
+        uint256 releaseCheckpoint;
     }
 
     ERC20 public immutable tpy;
-    uint256 public constant SECONDS_IN_YEAR = 1200;
-    uint256 public reinvestPeriod = 100;
-    uint256 public referrerFee = 10;
+    uint256 public constant SECONDS_IN_YEAR = 31557600; // 365.25 days
+    uint256 public constant REINVEST_PERIOD = 2629800; // 30.4 days
+    uint256 public referrerReward = 20; // 20% of user stake reward
+    uint256 private idCounter; // counter for referral system
 
     PoolInfo[] public poolInfo;
 
-    mapping(uint256 => mapping(address => UserStake)) public stakes;
-    mapping(address => address) public referalToReferrer;
+    mapping(uint256 => mapping(address => UserStake)) public stakes; // pool ID -> user address -> user stake info
 
-    constructor(ERC20 _tpy) {
+    mapping(uint256 => uint256) public referralToReferrer; // referral ID -> referrer ID
+    mapping(address => uint256) public addressToId; // user address -> referral system ID
+    mapping(uint256 => address) public idToAddress; // referral system ID -> user address
+
+    constructor(ERC20 _tpy, address treasury) {
         tpy = _tpy;
+        idToAddress[0] = treasury;
     }
 
+    /**
+     * @notice Add new staking pool
+     * @param apy_: New staking pool apy
+     * @param lockPeriod_: New staking pool lock period
+     */
     function addPool(uint256 apy_, uint256 lockPeriod_) external {
-        require(apy_ != 0 && lockPeriod_ != 0, "TPYStaking::Wrong pool params");
+        require(apy_ != 0, "TPYStaking::APY can't be 0");
 
-        poolInfo.push(PoolInfo({
-            lockPeriod: lockPeriod_,
-            apy: apy_,
-            totalStakes: 0
-        }));
+        poolInfo.push(
+            PoolInfo({isPaused: false, lockPeriod: lockPeriod_, apy: apy_, totalStakes: 0, pauseCheckpoint: 0})
+        );
     }
 
-    function stake(uint256 pid_, uint256 amount_, address referrer_) external {
-        require(poolInfo[pid_].lockPeriod != 0, "TPYStaking::Wrong pid");
+    /**
+     * @notice Change existing staking pool
+     * @param pid_: Staking pool ID
+     * @param newApy_: Staking pool new apy
+     * @param newLockPeriod_: Staking pool new lock period
+     */
+    function changePool(uint256 pid_, uint256 newApy_, uint256 newLockPeriod_) external {
+        require(newApy_ != 0, "TPYStaking::APY can't be 0");
+
+        poolInfo[pid_].apy = newApy_;
+        poolInfo[pid_].lockPeriod = newLockPeriod_;
+    }
+
+    /**
+     * @notice Pause existing staking pool
+     * @param pid_: Staking pool ID
+     */
+    function pausePool(uint256 pid_) external {
+        // TODO onlyOwner
+        require(!poolInfo[pid_].isPaused, "TPYStaking::Pool already paused");
+
+        poolInfo[pid_].isPaused = true;
+        poolInfo[pid_].pauseCheckpoint = getTime();
+    }
+
+    /**
+     * @notice Set referrer system reward
+     * @param newReferrerReward_: New % of referrer system reward
+     */
+    function setReferrerReward(uint256 newReferrerReward_) external {
+        referrerReward = newReferrerReward_;
+    }
+
+    /**
+     * @notice Stake
+     * @param pid_: Staking pool ID
+     * @param amount_: TPY token amount to stake
+     * @param referrerId_: Referrer ID
+     */
+    function stake(uint256 pid_, uint256 amount_, uint256 referrerId_) external {
+        require(!poolInfo[pid_].isPaused, "TPYStaking::Pool is paused");
 
         UserStake storage userStake = stakes[pid_][msg.sender];
 
-        if(referalToReferrer[msg.sender] == address(0)) {
-            referalToReferrer[msg.sender] = referrer_;
+        if (addressToId[msg.sender] == 0) {
+            if (idToAddress[referrerId_] == address(0)) {
+                referrerId_ = 0;
+            }
+            idCounter++;
+            addressToId[msg.sender] = idCounter;
+            idToAddress[idCounter] = msg.sender;
+            referralToReferrer[idCounter] = referrerId_;
         }
+
+        uint256 userReward = 0;
         if (userStake.amount > 0) {
-            reinvest(pid_);
+            userReward = _reinvest(pid_);
         }
 
         userStake.amount += amount_;
         userStake.checkpoint = getTime();
+        userStake.releaseCheckpoint = getTime() + poolInfo[pid_].lockPeriod;
         poolInfo[pid_].totalStakes += amount_;
 
-        tpy.transferFrom(msg.sender, address(this), amount_);
+        require(tpy.transferFrom(msg.sender, address(this), amount_));
+        if (userReward != 0) {
+            require(tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100));
+        }
+    }
+
+    /**
+     * @notice Unstake
+     * @param pid_: Staking pool ID
+     * @param amount_: TPY token amount to unstake
+     */
+    function unstake(uint256 pid_, uint256 amount_) external {
+        UserStake storage userStake = stakes[pid_][msg.sender];
+        // TODO lock period
+        require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+
+        uint256 userReward = _reinvest(pid_);
+
+        amount_ = amount_ > userStake.amount ? userStake.amount : amount_;
+
+        if (amount_ == userStake.amount) {
+            delete stakes[pid_][msg.sender];
+        } else {
+            userStake.amount -= amount_;
+            userStake.checkpoint = getTime();
+        }
+        poolInfo[pid_].totalStakes -= amount_;
+
+        require(tpy.transfer(msg.sender, amount_));
+        if (userReward != 0) {
+            require(tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100));
+        }
+    }
+
+    /**
+     * @notice Return user referrer address
+     * @param user_: referral address
+     */
+    function userReferrer(address user_) public view returns (address) {
+        return idToAddress[referralToReferrer[addressToId[user_]]];
     }
 
     /**
      * @notice Get current amount of user's stake including rewards
+     * @param pid_: Staking pool ID
      * @param user_: User's address
      */
     function stakeOfAuto(uint256 pid_, address user_) public view returns (uint256 result) {
@@ -74,26 +179,24 @@ contract TPYStaking {
             return result;
         }
 
-        uint256 passedPeriods = (getTime() - userStake.checkpoint) / reinvestPeriod;
-        
-        result = compound(result, pool.apy, SECONDS_IN_YEAR / reinvestPeriod, passedPeriods);
+        uint256 time = pool.isPaused ? pool.pauseCheckpoint : getTime();
+        uint256 passedPeriods = (time - userStake.checkpoint) / REINVEST_PERIOD;
+
+        result = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods);
     }
 
     /**
-     * @notice Reinvest user's rewards and change storage
+     * @notice reinvest user's rewards and change storage
      */
-    function reinvest(uint256 pid_) public returns (uint256 result) {
+    function _reinvest(uint256 pid_) private returns (uint256 userReward) {
         UserStake storage userStake = stakes[pid_][msg.sender];
-        require(userStake.amount > 0, "TPYStaking::No stake");
+        PoolInfo storage pool = poolInfo[pid_];
 
-        uint256 userReward = stakeOfAuto(pid_, msg.sender) - userStake.amount;
-        uint256 referrerReward = userReward * referrerFee / 100;
+        userReward = stakeOfAuto(pid_, msg.sender) - userStake.amount;
 
-        userStake.amount += userReward - referrerReward;
-        userStake.checkpoint = block.number;
-        poolInfo[pid_].totalStakes += userReward - referrerReward;
-
-        tpy.transfer(referalToReferrer[msg.sender], referrerReward);
+        userStake.amount += userReward;
+        userStake.checkpoint = pool.isPaused ? pool.pauseCheckpoint : getTime();
+        pool.totalStakes += userReward;
     }
 
     /**
@@ -101,12 +204,12 @@ contract TPYStaking {
      * @param principal_: User stake amount
      * @param n_: Number of passed periods
      */
-    function compound(
+    function _compound(
         uint256 principal_,
         uint256 apy_,
         uint256 periodsInYear_,
         uint256 n_
-    ) public pure returns (uint256) {
+    ) private pure returns (uint256) {
         return
             ABDKMath64x64.mulu(
                 ABDKMath64x64.pow(
@@ -118,6 +221,6 @@ contract TPYStaking {
     }
 
     function getTime() internal view virtual returns (uint256) {
-        return block.timestamp;
+        return block.timestamp / 60;
     }
 }
