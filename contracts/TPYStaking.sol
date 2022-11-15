@@ -3,10 +3,19 @@
 pragma solidity 0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./libs/ABDKMath64x64.sol";
 import "hardhat/console.sol";
 
-contract TPYStaking {
+contract TPYStaking is AccessControl {
+    /**
+     * @notice Info of each pool
+     * @param isPaused: is the pool paused
+     * @param lockPeriod: stake lock period
+     * @param apy: stake yearly interest. Format example: 1050 = 10,5%
+     * @param totalStakes: total stakes in this pool
+     * @param pauseCheckpoint: pool pause checkpoint
+     */
     struct PoolInfo {
         bool isPaused;
         uint256 lockPeriod;
@@ -41,9 +50,10 @@ contract TPYStaking {
     mapping(address => uint256) public addressToId; // user address -> referral system ID
     mapping(uint256 => address) public idToAddress; // referral system ID -> user address
 
-    constructor(ERC20 _tpy, address treasury) {
+    constructor(ERC20 _tpy, address treasury, address admin_) {
         tpy = _tpy;
         idToAddress[0] = treasury;
+        _grantRole(DEFAULT_ADMIN_ROLE, admin_);
     }
 
     /**
@@ -51,7 +61,7 @@ contract TPYStaking {
      * @param apy_: New staking pool apy
      * @param lockPeriod_: New staking pool lock period
      */
-    function addPool(uint256 apy_, uint256 lockPeriod_) external {
+    function addPool(uint256 apy_, uint256 lockPeriod_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(apy_ != 0, "TPYStaking::APY can't be 0");
 
         poolInfo.push(
@@ -65,7 +75,7 @@ contract TPYStaking {
      * @param newApy_: Staking pool new apy
      * @param newLockPeriod_: Staking pool new lock period
      */
-    function changePool(uint256 pid_, uint256 newApy_, uint256 newLockPeriod_) external {
+    function changePool(uint256 pid_, uint256 newApy_, uint256 newLockPeriod_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(newApy_ != 0, "TPYStaking::APY can't be 0");
 
         poolInfo[pid_].apy = newApy_;
@@ -76,8 +86,7 @@ contract TPYStaking {
      * @notice Pause existing staking pool
      * @param pid_: Staking pool ID
      */
-    function pausePool(uint256 pid_) external {
-        // TODO onlyOwner
+    function pausePool(uint256 pid_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(!poolInfo[pid_].isPaused, "TPYStaking::Pool already paused");
 
         poolInfo[pid_].isPaused = true;
@@ -88,8 +97,16 @@ contract TPYStaking {
      * @notice Set referrer system reward
      * @param newReferrerReward_: New % of referrer system reward
      */
-    function setReferrerReward(uint256 newReferrerReward_) external {
+    function setReferrerReward(uint256 newReferrerReward_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         referrerReward = newReferrerReward_;
+    }
+
+    /**
+     * @notice Set treasury address for referral system
+     * @param newTreasury_: New treasury address
+     */
+    function setTreasuryAddress(address newTreasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        idToAddress[0] = newTreasury_;
     }
 
     /**
@@ -136,7 +153,6 @@ contract TPYStaking {
      */
     function unstake(uint256 pid_, uint256 amount_) external {
         UserStake storage userStake = stakes[pid_][msg.sender];
-        // TODO lock period
         require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
 
         uint256 userReward = _reinvest(pid_);
@@ -182,7 +198,12 @@ contract TPYStaking {
         uint256 time = pool.isPaused ? pool.pauseCheckpoint : getTime();
         uint256 passedPeriods = (time - userStake.checkpoint) / REINVEST_PERIOD;
 
-        result = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods);
+        uint256 p1 = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods);
+        uint256 p2 = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods + 1);
+
+        result =
+            p1 +
+            (((time - (passedPeriods * REINVEST_PERIOD + userStake.checkpoint)) * (p2 - p1)) / REINVEST_PERIOD);
     }
 
     /**
@@ -213,7 +234,7 @@ contract TPYStaking {
         return
             ABDKMath64x64.mulu(
                 ABDKMath64x64.pow(
-                    ABDKMath64x64.add(ABDKMath64x64.fromUInt(1), ABDKMath64x64.divu(apy_, periodsInYear_ * 100)),
+                    ABDKMath64x64.add(ABDKMath64x64.fromUInt(1), ABDKMath64x64.divu(apy_, periodsInYear_ * 10000)),
                     n_
                 ),
                 principal_
@@ -221,6 +242,6 @@ contract TPYStaking {
     }
 
     function getTime() internal view virtual returns (uint256) {
-        return block.timestamp / 60;
+        return block.timestamp;
     }
 }
