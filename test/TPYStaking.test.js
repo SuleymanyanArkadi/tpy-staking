@@ -11,7 +11,7 @@ const {
 } = require("hardhat");
 
 describe("TPYStaking", function () {
-	let deployer, caller, treasury, tpy, staking, reinvestPeriod, referrerReward, adminRole;
+	let deployer, caller, treasury, shumi, tpy, staking, reinvestPeriod, referrerReward, adminRole;
 
 	const setupFixture = createFixture(async () => {
 		await fixture(["Hardhat"]);
@@ -33,7 +33,7 @@ describe("TPYStaking", function () {
 	});
 
 	before("Before All: ", async function () {
-		({ deployer, caller, treasury } = await getNamedSigners());
+		({ deployer, caller, treasury, shumi } = await getNamedSigners());
 	});
 
 	beforeEach(async function () {
@@ -56,8 +56,8 @@ describe("TPYStaking", function () {
 				false,
 				BigNumber.from(reinvestPeriod),
 				BigNumber.from(1200),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				constants.Zero,
+				constants.Zero
 			]);
 		});
 
@@ -69,15 +69,15 @@ describe("TPYStaking", function () {
 				false,
 				BigNumber.from(200000),
 				BigNumber.from(2000),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				constants.Zero,
+				constants.Zero
 			]);
 			expect(await staking.poolInfo(2)).to.eql([
 				false,
 				BigNumber.from(300000),
 				BigNumber.from(3000),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				constants.Zero,
+				constants.Zero
 			]);
 		});
 
@@ -97,15 +97,31 @@ describe("TPYStaking", function () {
 	});
 
 	describe("changePool: ", function () {
-		it("Should change existing pool apy", async function () {
-			await staking.changePool(0, 2000, reinvestPeriod);
+		it("Should change existing pool apy and reward should be distributed with new apy", async function () {
+			await staking.stake(0, parseUnits("100", 8), 0);
+			
+			await staking.changePool(0, 2400, reinvestPeriod);
 			expect(await staking.poolInfo(0)).to.eql([
 				false,
 				BigNumber.from(reinvestPeriod),
-				BigNumber.from(2000),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				BigNumber.from(2400),
+				parseUnits("100", 8),
+				constants.Zero
 			]);
+
+			await staking.setMockTime(reinvestPeriod);
+
+			const compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("100", 8));
+			expect(compReward).to.eq(parseUnits("2", 8).sub(1));
+			await expect(() => staking.unstake(0, constants.MaxUint256)).to.changeTokenBalances(
+				tpy,
+				[deployer, staking, treasury],
+				[
+					parseUnits("100", 8).add(compReward),
+					-parseUnits("100", 8).add(compReward).add(compReward.mul(referrerReward).div(100)),
+					compReward.mul(referrerReward).div(100)
+				]
+			);
 		});
 
 		it("Should change existing pool lockPeriod", async function () {
@@ -114,8 +130,8 @@ describe("TPYStaking", function () {
 				false,
 				BigNumber.from(10000),
 				BigNumber.from(1200),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				constants.Zero,
+				constants.Zero
 			]);
 		});
 
@@ -197,7 +213,7 @@ describe("TPYStaking", function () {
 				true,
 				BigNumber.from(reinvestPeriod),
 				BigNumber.from(1200),
-				BigNumber.from(0),
+				constants.Zero,
 				BigNumber.from(1111)
 			]);
 		});
@@ -268,7 +284,7 @@ describe("TPYStaking", function () {
 
 			expect(await staking.stakes(0, deployer.address)).to.eql([
 				parseUnits("1000", 8),
-				BigNumber.from(0),
+				constants.Zero,
 				reinvestPeriod
 			]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(parseUnits("1000", 8));
@@ -356,9 +372,9 @@ describe("TPYStaking", function () {
 			);
 
 			expect(await staking.stakes(0, deployer.address)).to.eql([
-				BigNumber.from(0),
-				BigNumber.from(0),
-				BigNumber.from(0)
+				constants.Zero,
+				constants.Zero,
+				constants.Zero
 			]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(0);
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
@@ -404,6 +420,56 @@ describe("TPYStaking", function () {
 
 			await expect(staking.unstake(0, parseUnits("50", 8))).to.be.revertedWith(
 				"TPYStaking::Lock period don't passed!"
+			);
+		});
+	});
+
+	describe("scenario: ", function () {
+		it("Should work scenario test", async function () {
+			await staking.addPool(1550, reinvestPeriod.mul(2).add(reinvestPeriod.div(2)));
+			await staking.addPool(2000, reinvestPeriod.mul(6));
+
+			await staking.stake(1, parseUnits("100", 8), 0);
+
+			await staking.setMockTime(reinvestPeriod);
+
+			await staking.connect(caller).stake(2, parseUnits("100", 8), 1);
+			expect(await staking.userReferrer(caller.address)).to.eq(deployer.address);
+
+			await staking.setMockTime(reinvestPeriod.mul(2));
+
+			await expect(staking.unstake(1, parseUnits("50", 8))).to.be.revertedWith(
+				"TPYStaking::Lock period don't passed!"
+			);
+
+			await staking.stake(1, parseUnits("100", 8), 0);
+			await staking.stake(2, parseUnits("100", 8), 0);
+
+			expect(await staking.stakes(1, deployer.address)).to.eql([
+				parseUnits("100", 8).add(BigNumber.from("10260001736")),
+				reinvestPeriod.mul(2),
+				reinvestPeriod.mul(4).add(reinvestPeriod.div(2))
+			]);
+			expect((await staking.poolInfo(1)).totalStakes).to.eq(
+				parseUnits("100", 8).add(BigNumber.from("10260001736"))
+			);
+
+			await staking.setMockTime(reinvestPeriod.mul(4).add(reinvestPeriod.div(2)));
+			await staking.pausePool(2);
+			await staking.setTreasuryAddress(shumi.address);
+
+			expect(await staking.stakeOfAuto(1, deployer.address)).to.eq(BigNumber.from("20921013157"));
+			const compReward = (await staking.stakeOfAuto(1, deployer.address)).sub(BigNumber.from("20260001736"));
+
+			await expect(() => staking.unstake(1, parseUnits("100", 8))).to.changeTokenBalances(
+				tpy,
+				[deployer, staking, treasury, shumi],
+				[
+					parseUnits("100", 8),
+					-parseUnits("100", 8).add(compReward.mul(referrerReward).div(100)),
+					constants.Zero,
+					compReward.mul(referrerReward).div(100)
+				]
 			);
 		});
 	});
