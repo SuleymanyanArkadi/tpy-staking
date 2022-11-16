@@ -5,7 +5,6 @@ pragma solidity 0.8.7;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./libs/ABDKMath64x64.sol";
-import "hardhat/console.sol";
 
 contract TPYStaking is AccessControl {
     /**
@@ -50,6 +49,15 @@ contract TPYStaking is AccessControl {
     mapping(address => uint256) public addressToId; // user address -> referral system ID
     mapping(uint256 => address) public idToAddress; // referral system ID -> user address
 
+    event Stake(address user, uint256 pid, uint256 amount);
+    event Unstake(address user, uint256 pid, uint256 amount);
+    event Restake(address user, uint256 pid, uint256 amount);
+    event NewReferral(address referral, address referrer);
+    event NewPool(uint256 pid, uint256 apy, uint256 lockPeriod);
+    event PausePool(uint256 pid, uint256 pauseCheckpoint);
+    event NewReferrerReward(uint256 referrerReward);
+    event NewTreasury(address treasury);
+
     constructor(ERC20 _tpy, address treasury, address admin_) {
         tpy = _tpy;
         idToAddress[0] = treasury;
@@ -67,6 +75,8 @@ contract TPYStaking is AccessControl {
         poolInfo.push(
             PoolInfo({isPaused: false, lockPeriod: lockPeriod_, apy: apy_, totalStakes: 0, pauseCheckpoint: 0})
         );
+
+        emit NewPool(poolInfo.length - 1, apy_, lockPeriod_);
     }
 
     /**
@@ -91,6 +101,8 @@ contract TPYStaking is AccessControl {
 
         poolInfo[pid_].isPaused = true;
         poolInfo[pid_].pauseCheckpoint = getTime();
+
+        emit PausePool(pid_, getTime());
     }
 
     /**
@@ -99,6 +111,8 @@ contract TPYStaking is AccessControl {
      */
     function setReferrerReward(uint256 newReferrerReward_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         referrerReward = newReferrerReward_;
+
+        emit NewReferrerReward(newReferrerReward_);
     }
 
     /**
@@ -107,6 +121,8 @@ contract TPYStaking is AccessControl {
      */
     function setTreasuryAddress(address newTreasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         idToAddress[0] = newTreasury_;
+
+        emit NewTreasury(newTreasury_);
     }
 
     /**
@@ -128,6 +144,8 @@ contract TPYStaking is AccessControl {
             addressToId[msg.sender] = idCounter;
             idToAddress[idCounter] = msg.sender;
             referralToReferrer[idCounter] = referrerId_;
+
+            emit NewReferral(msg.sender, idToAddress[referrerId_]);
         }
 
         uint256 userReward = 0;
@@ -139,6 +157,8 @@ contract TPYStaking is AccessControl {
         userStake.checkpoint = getTime();
         userStake.releaseCheckpoint = getTime() + poolInfo[pid_].lockPeriod;
         poolInfo[pid_].totalStakes += amount_;
+
+        emit Stake(msg.sender, pid_, amount_);
 
         require(tpy.transferFrom(msg.sender, address(this), amount_));
         if (userReward != 0) {
@@ -166,6 +186,8 @@ contract TPYStaking is AccessControl {
             userStake.checkpoint = getTime();
         }
         poolInfo[pid_].totalStakes -= amount_;
+
+        emit Unstake(msg.sender, pid_, amount_);
 
         require(tpy.transfer(msg.sender, amount_));
         if (userReward != 0) {
@@ -201,6 +223,7 @@ contract TPYStaking is AccessControl {
         uint256 p1 = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods);
         uint256 p2 = _compound(result, pool.apy, SECONDS_IN_YEAR / REINVEST_PERIOD, passedPeriods + 1);
 
+        // slither-disable-next-line divide-before-multiply
         result =
             p1 +
             (((time - (passedPeriods * REINVEST_PERIOD + userStake.checkpoint)) * (p2 - p1)) / REINVEST_PERIOD);
@@ -218,6 +241,8 @@ contract TPYStaking is AccessControl {
         userStake.amount += userReward;
         userStake.checkpoint = pool.isPaused ? pool.pauseCheckpoint : getTime();
         pool.totalStakes += userReward;
+
+        emit Restake(msg.sender, pid_, userReward);
     }
 
     /**

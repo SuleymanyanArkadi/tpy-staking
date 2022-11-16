@@ -81,6 +81,10 @@ describe("TPYStaking", function () {
 			]);
 		});
 
+		it("Should emit 'NewPool'", async function () {
+			await expect(staking.addPool(3000, 300000)).to.emit(staking, "NewPool").withArgs(1, 3000, 300000);
+		});
+
 		it("Should revert with 'TPYStaking::APY can't be 0'", async function () {
 			await expect(staking.addPool(0, 100000)).to.be.revertedWith("TPYStaking::APY can't be 0");
 		});
@@ -133,6 +137,12 @@ describe("TPYStaking", function () {
 			expect(await staking.referrerReward()).to.eq(referrerReward * 2);
 		});
 
+		it("Should emit 'NewReferrerReward'", async function () {
+			await expect(staking.setReferrerReward(referrerReward * 2))
+				.to.emit(staking, "NewReferrerReward")
+				.withArgs(referrerReward * 2);
+		});
+
 		it("Should revert: Only admin", async function () {
 			await expect(staking.connect(treasury).setReferrerReward(referrerReward * 2)).to.be.revertedWith(
 				`AccessControl: account ${treasury.address.toLowerCase()} is missing role ${adminRole}`
@@ -165,6 +175,12 @@ describe("TPYStaking", function () {
 			);
 		});
 
+		it("Should emit 'NewTreasury'", async function () {
+			await expect(staking.setTreasuryAddress(caller.address))
+				.to.emit(staking, "NewTreasury")
+				.withArgs(caller.address);
+		});
+
 		it("Should revert: Only admin", async function () {
 			await expect(staking.connect(treasury).setTreasuryAddress(deployer.address)).to.be.revertedWith(
 				`AccessControl: account ${treasury.address.toLowerCase()} is missing role ${adminRole}`
@@ -184,6 +200,12 @@ describe("TPYStaking", function () {
 				BigNumber.from(0),
 				BigNumber.from(1111)
 			]);
+		});
+
+		it("Should emit 'PausePool'", async function () {
+			await staking.setMockTime(1000);
+
+			await expect(staking.pausePool(0)).to.emit(staking, "PausePool").withArgs(0, 1000);
 		});
 
 		it("Should revert with 'TPYStaking::Pool already paused'", async function () {
@@ -285,6 +307,29 @@ describe("TPYStaking", function () {
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
 		});
 
+		it("Should emit 'Stake'", async function () {
+			await expect(staking.stake(0, parseUnits("100", 8), 0))
+				.to.emit(staking, "Stake")
+				.withArgs(deployer.address, 0, parseUnits("100", 8));
+		});
+
+		it("Should emit 'NewReferral'", async function () {
+			await expect(staking.stake(0, parseUnits("100", 8), 0))
+				.to.emit(staking, "NewReferral")
+				.withArgs(deployer.address, treasury.address);
+		});
+
+		it("Should emit 'Restake'", async function () {
+			await staking.stake(0, parseUnits("100", 8), 0);
+
+			await staking.setMockTime(reinvestPeriod.mul(10));
+			const compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("100", 8));
+
+			await expect(staking.stake(0, parseUnits("100", 8), 0))
+				.to.emit(staking, "Restake")
+				.withArgs(deployer.address, 0, compReward);
+		});
+
 		it("Should revert with 'TPYStaking::Pool is paused'", async function () {
 			await staking.pausePool(0);
 
@@ -343,6 +388,15 @@ describe("TPYStaking", function () {
 			]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(parseUnits("50", 8).add(compReward));
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
+		});
+
+		it("Should emit 'Unstake'", async function () {
+			await staking.stake(0, parseUnits("100", 8), 0);
+			await staking.setMockTime(reinvestPeriod);
+
+			await expect(staking.unstake(0, parseUnits("50", 8)))
+				.to.emit(staking, "Unstake")
+				.withArgs(deployer.address, 0, parseUnits("50", 8));
 		});
 
 		it("Should revert with 'TPYStaking::Lock period don't passed!'", async function () {
