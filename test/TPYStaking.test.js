@@ -99,7 +99,7 @@ describe("TPYStaking", function () {
 	describe("changePool: ", function () {
 		it("Should change existing pool apy and reward should be distributed with new apy", async function () {
 			await staking.stake(0, parseUnits("100", 8), 0);
-			
+
 			await staking.changePool(0, 2400, reinvestPeriod);
 			expect(await staking.poolInfo(0)).to.eql([
 				false,
@@ -371,11 +371,7 @@ describe("TPYStaking", function () {
 				]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				constants.Zero,
-				constants.Zero
-			]);
+			expect(await staking.stakes(0, deployer.address)).to.eql([constants.Zero, constants.Zero, constants.Zero]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(0);
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
 		});
@@ -459,7 +455,7 @@ describe("TPYStaking", function () {
 			await staking.setTreasuryAddress(shumi.address);
 
 			expect(await staking.stakeOfAuto(1, deployer.address)).to.eq(BigNumber.from("20921013157"));
-			const compReward = (await staking.stakeOfAuto(1, deployer.address)).sub(BigNumber.from("20260001736"));
+			let compReward = (await staking.stakeOfAuto(1, deployer.address)).sub(BigNumber.from("20260001736"));
 
 			await expect(() => staking.unstake(1, parseUnits("100", 8))).to.changeTokenBalances(
 				tpy,
@@ -468,6 +464,21 @@ describe("TPYStaking", function () {
 					parseUnits("100", 8),
 					-parseUnits("100", 8).add(compReward.mul(referrerReward).div(100)),
 					constants.Zero,
+					compReward.mul(referrerReward).div(100)
+				]
+			);
+
+			await staking.setMockTime(reinvestPeriod.mul(7));
+
+			compReward = (await staking.stakeOfAuto(2, caller.address)).sub(parseUnits("100", 8));
+
+			expect(compReward).to.eq(BigNumber.from("595949459"));
+			await expect(() => staking.connect(caller).unstake(2, constants.MaxUint256)).to.changeTokenBalances(
+				tpy,
+				[caller, staking, deployer],
+				[
+					parseUnits("100", 8).add(compReward),
+					-parseUnits("100", 8).add(compReward).add(compReward.mul(referrerReward).div(100)),
 					compReward.mul(referrerReward).div(100)
 				]
 			);
