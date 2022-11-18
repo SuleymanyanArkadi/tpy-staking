@@ -1,12 +1,12 @@
 module.exports = async ({ deployments: { deploy }, ethers: { getNamedSigners, getContract } }) => {
-	const { deployer, treasury } = await getNamedSigners();
+	const { deployer } = await getNamedSigners();
 
 	const token = await getContract("TPYToken");
 
 	await deploy("TPYStaking", {
 		from: deployer.address,
-		contract: "TPYStaking",
-		args: [token.address, treasury.address],
+		contract: "TPYStakingMock",
+		args: [token.address, deployer.address, deployer.address],
 		log: true
 	});
 };
