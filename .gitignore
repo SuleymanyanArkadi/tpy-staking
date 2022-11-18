@@ -9,6 +9,7 @@ coverage.json
 coverage
 deployments/localhost
 deployments/hardhat
+deployments/goerli
 bin
 cache
 artifacts
