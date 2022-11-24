@@ -11,13 +11,14 @@ const {
 } = require("hardhat");
 
 describe("TPYStaking", function () {
-	let deployer, caller, treasury, shumi, tpy, staking, reinvestPeriod, referrerReward, adminRole;
+	let deployer, caller, treasury, shumi, tpy, staking, testToken, reinvestPeriod, referrerReward, adminRole;
 
 	const setupFixture = createFixture(async () => {
 		await fixture(["Hardhat"]);
 
 		const tpy = await getContract("TPYToken");
 		const staking = await getContract("TPYStaking");
+		const testToken = await getContract("TestToken");
 
 		const reinvestPeriod = await staking.REINVEST_PERIOD();
 		const referrerReward = await staking.referrerReward();
@@ -29,7 +30,7 @@ describe("TPYStaking", function () {
 		await tpy.approve(staking.address, constants.MaxUint256);
 		await tpy.connect(caller).approve(staking.address, constants.MaxUint256);
 
-		return [tpy, staking, reinvestPeriod, referrerReward, adminRole];
+		return [tpy, staking, testToken, reinvestPeriod, referrerReward, adminRole];
 	});
 
 	before("Before All: ", async function () {
@@ -37,7 +38,7 @@ describe("TPYStaking", function () {
 	});
 
 	beforeEach(async function () {
-		[tpy, staking, reinvestPeriod, referrerReward, adminRole] = await setupFixture();
+		[tpy, staking, testToken, reinvestPeriod, referrerReward, adminRole] = await setupFixture();
 	});
 
 	describe("Initialization: ", function () {
@@ -417,6 +418,27 @@ describe("TPYStaking", function () {
 			await expect(staking.unstake(0, parseUnits("50", 8))).to.be.revertedWith(
 				"TPYStaking::Lock period don't passed!"
 			);
+		});
+	});
+
+	describe("inCaseTokensGetStuck: ", function () {
+		it("Should withdraw stuck tokens", async function () {
+			await testToken.transfer(staking.address, 10000);
+			await expect(() => staking.inCaseTokensGetStuck(testToken.address, 5000)).to.changeTokenBalances(
+				testToken,
+				[staking, deployer],
+				[-5000, 5000]
+			);
+		});
+
+		it("Should revert with 'Ownable: caller is not the owner'", async function () {
+			await expect(staking.connect(caller).inCaseTokensGetStuck(testToken.address, 100)).to.be.revertedWith(
+				`AccessControl: account ${caller.address.toLowerCase()} is missing role ${adminRole}`
+			);
+		});
+
+		it("Should revert with 'Vesting::FORBIDDEN'", async function () {
+			await expect(staking.inCaseTokensGetStuck(tpy.address, 100)).to.be.revertedWith("Vesting::FORBIDDEN");
 		});
 	});
 

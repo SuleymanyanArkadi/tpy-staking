@@ -126,6 +126,17 @@ contract TPYStaking is AccessControl {
     }
 
     /**
+     * @notice withdraw stuck tokens
+     * @param _token token for withdraw.
+     * @param _amount amount of tokens.
+     */
+    function inCaseTokensGetStuck(address _token, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(address(tpy) != _token, "TPYStaking::FORBIDDEN");
+
+        require(IERC20(_token).transfer(msg.sender, _amount));
+    }
+
+    /**
      * @notice Stake
      * @param pid_: Staking pool ID
      * @param amount_: TPY token amount to stake
