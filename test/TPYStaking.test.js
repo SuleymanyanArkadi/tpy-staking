@@ -437,8 +437,8 @@ describe("TPYStaking", function () {
 			);
 		});
 
-		it("Should revert with 'Vesting::FORBIDDEN'", async function () {
-			await expect(staking.inCaseTokensGetStuck(tpy.address, 100)).to.be.revertedWith("Vesting::FORBIDDEN");
+		it("Should revert with 'TPYStaking::FORBIDDEN'", async function () {
+			await expect(staking.inCaseTokensGetStuck(tpy.address, 100)).to.be.revertedWith("TPYStaking::FORBIDDEN");
 		});
 	});
 

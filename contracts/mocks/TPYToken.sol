@@ -9,6 +9,10 @@ contract TPYToken is ERC20 {
         _mint(msg.sender, 1e10 * 1e8);
     }
 
+    function decimals() public view virtual override returns (uint8) {
+        return 8;
+    }
+
     function mint(address account, uint256 amount) external {
         _mint(account, amount);
     }
