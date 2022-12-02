@@ -19,7 +19,7 @@ module.exports = {
 			chainId: 31337,
 			forking: {
 				enabled: false,
-				url: `https://bsc.getblock.io/mainnet/?api_key=${process.env.FORKING_API_KEY}`,
+				url: `https://bsc.getblock.io/mainnet/?api_key=${process.env.FORKING_API_KEY}`
 			},
 			accounts: {
 				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
@@ -33,43 +33,30 @@ module.exports = {
 			tags: [tag],
 			deploy: [deploy]
 		},
-		bsc: {
-			chainId: 56,
+		mainnet: {
+			url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+			accounts: {
+				mnemonic: `${process.env.MAINNET_MNEMONIC}`,
+				path: "m/44'/60'/0'/0",
+				initialIndex: 0,
+				count: 20
+			},
+			chainId: 1,
+			tags: ["mainnet"],
+			deploy: ["./deploy/mainnet"]
+		},
+		goerli: {
+			chainId: 5,
 			accounts: {
 				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
 				path: "m/44'/60'/0'/0",
 				initialIndex: 0,
 				count: 20
 			},
-			url: "https://bsc-dataseed.binance.org",
-			tags: ["bsc"],
-			deploy: ["./deploy/bsc"]
-		},
-		"bsc-testnet": {
-			chainId: 97,
-			gasMultiplier: 1,
-			accounts: {
-				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
-				path: "m/44'/60'/0'/0",
-				initialIndex: 0,
-				count: 20
-			},
-			url: "https://data-seed-prebsc-2-s1.binance.org:8545/",
-			tags: ["bsc-testnet"],
-			deploy: ["./deploy/bsc-testnet"]
-		},
-		rinkeby: {
-			chainId: 4,
-			accounts: {
-				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
-				path: "m/44'/60'/0'/0",
-				initialIndex: 0,
-				count: 20
-			},
-			url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-			tags: ["rinkeby"],
-			deploy: ["./deploy/rinkeby"]
-		},
+			url: `https://eth-goerli.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+			tags: ["testnet"],
+			deploy: ["./deploy/testnet"]
+		}
 	},
 	defaultConfig: {
 		gasPrice: "auto"
