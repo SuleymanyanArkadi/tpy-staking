@@ -127,13 +127,13 @@ contract TPYStaking is AccessControl {
 
     /**
      * @notice withdraw stuck tokens
-     * @param _token token for withdraw.
-     * @param _amount amount of tokens.
+     * @param token_ token for withdraw.
+     * @param amount_ amount of tokens.
      */
-    function inCaseTokensGetStuck(address _token, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(address(tpy) != _token, "TPYStaking::FORBIDDEN");
+    function inCaseTokensGetStuck(address token_, uint256 amount_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(address(tpy) != token_, "TPYStaking::FORBIDDEN");
 
-        require(IERC20(_token).transfer(msg.sender, _amount));
+        require(IERC20(token_).transfer(msg.sender, amount_));
     }
 
     /**
