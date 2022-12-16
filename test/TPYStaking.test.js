@@ -165,6 +165,12 @@ describe("TPYStaking", function () {
 				`AccessControl: account ${treasury.address.toLowerCase()} is missing role ${adminRole}`
 			);
 		});
+
+		it("Should revert: TPYStaking::Referrer reward should be between 0 and 100", async function () {
+			await expect(staking.setReferrerReward(101)).to.be.revertedWith(
+				"TPYStaking::Referrer reward should be between 0 and 100"
+			);
+		});
 	});
 
 	describe("setTreasuryAddress: ", function () {
@@ -437,8 +443,8 @@ describe("TPYStaking", function () {
 			);
 		});
 
-		it("Should revert with 'TPYStaking::FORBIDDEN'", async function () {
-			await expect(staking.inCaseTokensGetStuck(tpy.address, 100)).to.be.revertedWith("TPYStaking::FORBIDDEN");
+		it("Should revert with 'TPYStaking::TPY token can't be withdrawn'", async function () {
+			await expect(staking.inCaseTokensGetStuck(tpy.address, 100)).to.be.revertedWith("TPYStaking::TPY token can't be withdrawn");
 		});
 	});
 

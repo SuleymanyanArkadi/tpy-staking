@@ -71,6 +71,7 @@
 		"web3": "^1.7.0"
 	},
 	"dependencies": {
+		"abdk-libraries-solidity": "^3.1.0",
 		"ethereumjs-util": "^7.1.0",
 		"hardhat-local-networks-config-plugin": "^0.0.6",
 		"web3-utils": "^1.6.1"
