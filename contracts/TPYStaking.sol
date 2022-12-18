@@ -26,17 +26,20 @@ contract TPYStaking is AccessControl {
 
     /**
      * @notice Info of each stake
+     * @param reserved: amount of reserved TPY
      * @param amount: amount of user's stake
      * @param checkpoint: timestamp of user's last action
      * @param releaseCheckpoint: timestamp of passing the lock period
      */
     struct UserStake {
+        uint256 reserved;
         uint256 amount;
         uint256 checkpoint;
         uint256 releaseCheckpoint;
     }
 
     ERC20 public immutable tpy;
+    uint256 public totalReserved; // total amount of reserved TPY
     uint256 public constant SECONDS_IN_YEAR = 31557600; // 365.25 days
     uint256 public constant REINVEST_PERIOD = 2629800; // 30.4 days
     uint256 public referrerReward = 20; // 20% of user stake reward
@@ -166,20 +169,17 @@ contract TPYStaking is AccessControl {
             userReward = _reinvest(pid_);
         }
 
+        userStake.reserved += amount_;
         userStake.amount += amount_;
         userStake.checkpoint = getTime();
         userStake.releaseCheckpoint = getTime() + poolInfo[pid_].lockPeriod;
         poolInfo[pid_].totalStakes += amount_;
+        totalReserved += amount_;
 
         emit Stake(msg.sender, pid_, amount_);
 
-        require(tpy.transferFrom(msg.sender, address(this), amount_), "TPYStaking::Transfer error");
-        if (userReward != 0) {
-            require(
-                tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100),
-                "TPYStaking::Transfer error"
-            );
-        }
+        tpy.transferFrom(msg.sender, address(this), amount_);
+        tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100);
     }
 
     /**
@@ -195,6 +195,20 @@ contract TPYStaking is AccessControl {
 
         amount_ = amount_ > userStake.amount ? userStake.amount : amount_;
 
+        // Check for contract reserve
+        if (amount_ >= userStake.reserved) {
+            totalReserved -= userStake.reserved;
+            userStake.reserved = 0;
+
+            require(
+                tpy.balanceOf(address(this)) >= totalReserved + amount_ + (userReward * referrerReward) / 100,
+                "TPYStaking::Not enough tokens in contract"
+            );
+        } else {
+            totalReserved -= amount_;
+            userStake.reserved -= amount_;
+        }
+
         if (amount_ == userStake.amount) {
             delete stakes[pid_][msg.sender];
         } else {
@@ -205,13 +219,32 @@ contract TPYStaking is AccessControl {
 
         emit Unstake(msg.sender, pid_, amount_);
 
-        require(tpy.transfer(msg.sender, amount_), "TPYStaking::Transfer error");
-        if (userReward != 0) {
-            require(
-                tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100),
-                "TPYStaking::Transfer error"
-            );
+        tpy.transfer(msg.sender, amount_);
+        tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100);
+    }
+
+    /**
+     * @notice Emergency unstake for reserved stake tokens
+     * @param pid_: Staking pool ID
+     */
+    function emergencyUnstake(uint256 pid_) external {
+        UserStake storage userStake = stakes[pid_][msg.sender];
+        uint256 reserved = userStake.reserved;
+        require(reserved != 0, "TPYStaking::Insufficient reserve balance");
+
+        if (userStake.amount == reserved) {
+            delete stakes[pid_][msg.sender];
+        } else {
+            userStake.reserved = 0;
+            userStake.amount -= reserved;
         }
+
+        totalReserved -= reserved;
+        poolInfo[pid_].totalStakes -= reserved;
+
+        emit Unstake(msg.sender, pid_, reserved);
+
+        tpy.transfer(msg.sender, reserved);
     }
 
     /**
