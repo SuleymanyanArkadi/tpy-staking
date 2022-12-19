@@ -168,6 +168,10 @@ contract TPYStaking is AccessControl {
         if (userStake.amount > 0) {
             userReward = _reinvest(pid_);
         }
+        require(
+            tpy.balanceOf(address(this)) >= totalReserved + (userReward * referrerReward) / 100,
+            "TPYStaking::Not enough tokens in contract"
+        );
 
         userStake.reserved += amount_;
         userStake.amount += amount_;
@@ -196,18 +200,20 @@ contract TPYStaking is AccessControl {
         amount_ = amount_ > userStake.amount ? userStake.amount : amount_;
 
         // Check for contract reserve
-        if (amount_ >= userStake.reserved) {
-            totalReserved -= userStake.reserved;
-            userStake.reserved = 0;
-
-            require(
-                tpy.balanceOf(address(this)) >= totalReserved + amount_ + (userReward * referrerReward) / 100,
-                "TPYStaking::Not enough tokens in contract"
-            );
-        } else {
-            totalReserved -= amount_;
-            userStake.reserved -= amount_;
+        if (userStake.reserved != 0) {
+            if (amount_ >= userStake.reserved) {
+                totalReserved -= userStake.reserved;
+                userStake.reserved = 0;
+            } else {
+                totalReserved -= amount_;
+                userStake.reserved -= amount_;
+            }
         }
+
+        require(
+            tpy.balanceOf(address(this)) >= totalReserved + amount_ + (userReward * referrerReward) / 100,
+            "TPYStaking::Not enough tokens in contract"
+        );
 
         if (amount_ == userStake.amount) {
             delete stakes[pid_][msg.sender];
@@ -229,6 +235,8 @@ contract TPYStaking is AccessControl {
      */
     function emergencyUnstake(uint256 pid_) external {
         UserStake storage userStake = stakes[pid_][msg.sender];
+        require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+
         uint256 reserved = userStake.reserved;
         require(reserved != 0, "TPYStaking::Insufficient reserve balance");
 

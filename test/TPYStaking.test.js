@@ -311,6 +311,8 @@ describe("TPYStaking", function () {
 		});
 
 		it("Should stake second time and reinvest assets", async function () {
+			await tpy.transfer(staking.address, parseUnits("100000", 8));
+
 			await staking.stake(0, parseUnits("100", 8), 0);
 
 			await staking.setMockTime(reinvestPeriod.mul(10));
@@ -348,6 +350,7 @@ describe("TPYStaking", function () {
 		});
 
 		it("Should emit 'Restake'", async function () {
+			await tpy.transfer(staking.address, parseUnits("100000", 8));
 			await staking.stake(0, parseUnits("100", 8), 0);
 
 			await staking.setMockTime(reinvestPeriod.mul(10));
@@ -362,6 +365,16 @@ describe("TPYStaking", function () {
 			await staking.pausePool(0);
 
 			await expect(staking.stake(0, parseUnits("100", 8), 0)).to.be.revertedWith("TPYStaking::Pool is paused");
+		});
+
+		it("Should revert with 'TPYStaking::Not enough tokens in contract'", async function () {
+			await staking.stake(0, parseUnits("100", 8), 0);
+
+			await staking.setMockTime(reinvestPeriod.mul(10));
+
+			await expect(staking.stake(0, parseUnits("100", 8), 0)).to.be.revertedWith(
+				"TPYStaking::Not enough tokens in contract"
+			);
 		});
 	});
 
@@ -422,7 +435,58 @@ describe("TPYStaking", function () {
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
 		});
 
+		it("Should unstake all reserved amount and then unstake all", async function () {
+			await tpy.transfer(staking.address, parseUnits("100000", 8));
+			await staking.stake(0, parseUnits("100", 8), 0);
+
+			await staking.setMockTime(reinvestPeriod);
+
+			let compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("100", 8));
+
+			await expect(() => staking.unstake(0, parseUnits("100", 8))).to.changeTokenBalances(
+				tpy,
+				[deployer, staking, treasury],
+				[
+					parseUnits("100", 8),
+					-parseUnits("100", 8).add(compReward.mul(referrerReward).div(100)),
+					compReward.mul(referrerReward).div(100)
+				]
+			);
+
+			expect(await staking.stakes(0, deployer.address)).to.eql([
+				constants.Zero,
+				compReward,
+				reinvestPeriod,
+				reinvestPeriod
+			]);
+			expect(await staking.totalReserved()).to.eq(0);
+
+			await staking.setMockTime(reinvestPeriod.mul(3));
+
+			compReward = await staking.stakeOfAuto(0, deployer.address);
+			const stakeAmount = (await staking.stakes(0, deployer.address)).amount;
+
+			await expect(() => staking.unstake(0, constants.MaxUint256)).to.changeTokenBalances(
+				tpy,
+				[deployer, staking, treasury],
+				[
+					compReward,
+					-compReward.add(compReward.sub(stakeAmount).mul(referrerReward).div(100)),
+					compReward.sub(stakeAmount).mul(referrerReward).div(100)
+				]
+			);
+
+			expect(await staking.stakes(0, deployer.address)).to.eql([
+				constants.Zero,
+				constants.Zero,
+				constants.Zero,
+				constants.Zero
+			]);
+			expect((await staking.poolInfo(0)).totalStakes).to.eq(constants.Zero);
+		});
+
 		it("Should emit 'Unstake'", async function () {
+			await tpy.transfer(staking.address, parseUnits("100000", 8));
 			await staking.stake(0, parseUnits("100", 8), 0);
 			await staking.setMockTime(reinvestPeriod);
 
@@ -478,6 +542,7 @@ describe("TPYStaking", function () {
 			await staking.stake(0, parseUnits("100", 8), 0);
 
 			const compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("200", 8));
+			await staking.setMockTime(reinvestPeriod.mul(3));
 
 			await expect(() => staking.emergencyUnstake(0)).to.changeTokenBalances(
 				tpy,
@@ -497,10 +562,17 @@ describe("TPYStaking", function () {
 
 		it("Should emit 'Unstake'", async function () {
 			await staking.stake(0, parseUnits("100", 8), 0);
+			await staking.setMockTime(reinvestPeriod);
 
 			await expect(staking.emergencyUnstake(0))
 				.to.emit(staking, "Unstake")
 				.withArgs(deployer.address, 0, parseUnits("100", 8));
+		});
+
+		it("Should revert with 'TPYStaking::Lock period don't passed!'", async function () {
+			await staking.stake(0, parseUnits("100", 8), 0);
+
+			await expect(staking.emergencyUnstake(0)).to.be.revertedWith("TPYStaking::Lock period don't passed!");
 		});
 
 		it("Should revert with 'TPYStaking::Insufficient reserve balance'", async function () {
