@@ -26,20 +26,17 @@ contract TPYStaking is AccessControl {
 
     /**
      * @notice Info of each stake
-     * @param reserved: amount of reserved TPY
      * @param amount: amount of user's stake
      * @param checkpoint: timestamp of user's last action
      * @param releaseCheckpoint: timestamp of passing the lock period
      */
     struct UserStake {
-        uint256 reserved;
         uint256 amount;
         uint256 checkpoint;
         uint256 releaseCheckpoint;
     }
 
     ERC20 public immutable tpy;
-    uint256 public totalReserved; // total amount of reserved TPY
     uint256 public constant SECONDS_IN_YEAR = 31557600; // 365.25 days
     uint256 public constant REINVEST_PERIOD = 2629800; // 30.4 days
     uint256 public referrerReward = 20; // 20% of user stake reward
@@ -169,16 +166,14 @@ contract TPYStaking is AccessControl {
             userReward = _reinvest(pid_);
         }
         require(
-            tpy.balanceOf(address(this)) >= totalReserved + (userReward * referrerReward) / 100,
+            tpy.balanceOf(address(this)) >= totalStakes() + (userReward * referrerReward) / 100,
             "TPYStaking::Not enough tokens in contract"
         );
 
-        userStake.reserved += amount_;
         userStake.amount += amount_;
         userStake.checkpoint = getTime();
         userStake.releaseCheckpoint = getTime() + poolInfo[pid_].lockPeriod;
         poolInfo[pid_].totalStakes += amount_;
-        totalReserved += amount_;
 
         emit Stake(msg.sender, pid_, amount_);
 
@@ -194,24 +189,14 @@ contract TPYStaking is AccessControl {
     function unstake(uint256 pid_, uint256 amount_) external {
         UserStake storage userStake = stakes[pid_][msg.sender];
         require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+        require(userStake.amount != 0, "TPYStaking::No stake");
 
         uint256 userReward = _reinvest(pid_);
 
         amount_ = amount_ > userStake.amount ? userStake.amount : amount_;
 
-        // Check for contract reserve
-        if (userStake.reserved != 0) {
-            if (amount_ >= userStake.reserved) {
-                totalReserved -= userStake.reserved;
-                userStake.reserved = 0;
-            } else {
-                totalReserved -= amount_;
-                userStake.reserved -= amount_;
-            }
-        }
-
         require(
-            tpy.balanceOf(address(this)) >= totalReserved + amount_ + (userReward * referrerReward) / 100,
+            tpy.balanceOf(address(this)) >= totalStakes() + (userReward * referrerReward) / 100,
             "TPYStaking::Not enough tokens in contract"
         );
 
@@ -230,29 +215,21 @@ contract TPYStaking is AccessControl {
     }
 
     /**
-     * @notice Emergency unstake for reserved stake tokens
+     * @notice Emergency unstake
      * @param pid_: Staking pool ID
      */
     function emergencyUnstake(uint256 pid_) external {
-        UserStake storage userStake = stakes[pid_][msg.sender];
+        UserStake memory userStake = stakes[pid_][msg.sender];
         require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+        require(userStake.amount != 0, "TPYStaking::No stake");
 
-        uint256 reserved = userStake.reserved;
-        require(reserved != 0, "TPYStaking::Insufficient reserve balance");
+        uint256 amount = userStake.amount;
+        poolInfo[pid_].totalStakes -= amount;
+        delete stakes[pid_][msg.sender];
 
-        if (userStake.amount == reserved) {
-            delete stakes[pid_][msg.sender];
-        } else {
-            userStake.reserved = 0;
-            userStake.amount -= reserved;
-        }
+        emit Unstake(msg.sender, pid_, amount);
 
-        totalReserved -= reserved;
-        poolInfo[pid_].totalStakes -= reserved;
-
-        emit Unstake(msg.sender, pid_, reserved);
-
-        tpy.transfer(msg.sender, reserved);
+        tpy.transfer(msg.sender, amount);
     }
 
     /**
@@ -261,6 +238,15 @@ contract TPYStaking is AccessControl {
      */
     function userReferrer(address user_) public view returns (address) {
         return idToAddress[referralToReferrer[addressToId[user_]]];
+    }
+
+    /**
+     * @notice Return total stakes in all pools
+     */
+    function totalStakes() public view returns (uint256 amount) {
+        for (uint256 i = 0; i < poolInfo.length; i++) {
+            amount += poolInfo[i].totalStakes;
+        }
     }
 
     /**

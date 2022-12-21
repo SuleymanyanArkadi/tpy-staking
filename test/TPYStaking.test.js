@@ -294,7 +294,6 @@ describe("TPYStaking", function () {
 
 			expect(await staking.stakes(0, deployer.address)).to.eql([
 				parseUnits("1000", 8),
-				parseUnits("1000", 8),
 				constants.Zero,
 				reinvestPeriod
 			]);
@@ -328,7 +327,6 @@ describe("TPYStaking", function () {
 				]
 			);
 			expect(await staking.stakes(0, deployer.address)).to.eql([
-				parseUnits("200", 8),
 				parseUnits("200", 8).add(compReward),
 				reinvestPeriod.mul(10),
 				reinvestPeriod.mul(11)
@@ -397,12 +395,7 @@ describe("TPYStaking", function () {
 				]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				constants.Zero,
-				constants.Zero,
-				constants.Zero
-			]);
+			expect(await staking.stakes(0, deployer.address)).to.eql([constants.Zero, constants.Zero, constants.Zero]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(0);
 			expect(await staking.userReferrer(deployer.address)).to.eq(treasury.address);
 		});
@@ -426,7 +419,6 @@ describe("TPYStaking", function () {
 			);
 
 			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
 				compReward.sub(parseUnits("1", 8)),
 				reinvestPeriod.add(reinvestPeriod.div(2)),
 				reinvestPeriod
@@ -453,13 +445,7 @@ describe("TPYStaking", function () {
 				]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				compReward,
-				reinvestPeriod,
-				reinvestPeriod
-			]);
-			expect(await staking.totalReserved()).to.eq(0);
+			expect(await staking.stakes(0, deployer.address)).to.eql([compReward, reinvestPeriod, reinvestPeriod]);
 
 			await staking.setMockTime(reinvestPeriod.mul(3));
 
@@ -476,12 +462,7 @@ describe("TPYStaking", function () {
 				]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				constants.Zero,
-				constants.Zero,
-				constants.Zero
-			]);
+			expect(await staking.stakes(0, deployer.address)).to.eql([constants.Zero, constants.Zero, constants.Zero]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(constants.Zero);
 		});
 
@@ -501,6 +482,10 @@ describe("TPYStaking", function () {
 			await expect(staking.unstake(0, parseUnits("50", 8))).to.be.revertedWith(
 				"TPYStaking::Lock period don't passed!"
 			);
+		});
+
+		it("Should revert with 'TPYStaking::No stake'", async function () {
+			await expect(staking.unstake(0, parseUnits("50", 8))).to.be.revertedWith("TPYStaking::No stake");
 		});
 
 		it("Should revert with 'TPYStaking::Not enough tokens in contract'", async function () {
@@ -525,39 +510,27 @@ describe("TPYStaking", function () {
 				[parseUnits("100", 8), -parseUnits("100", 8)]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				constants.Zero,
-				constants.Zero,
-				constants.Zero
-			]);
+			expect(await staking.stakes(0, deployer.address)).to.eql([constants.Zero, constants.Zero, constants.Zero]);
 			expect((await staking.poolInfo(0)).totalStakes).to.eq(0);
-			expect(await staking.totalReserved()).to.eq(0);
 		});
 
-		it("Should unstake emergency and stake data should save", async function () {
+		it("Should unstake emergency after 2 stakes", async function () {
 			await tpy.transfer(staking.address, parseUnits("100000", 8));
 			await staking.stake(0, parseUnits("100", 8), 0);
 			await staking.setMockTime(reinvestPeriod.add(reinvestPeriod.div(2)));
+			const compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("100", 8));
 			await staking.stake(0, parseUnits("100", 8), 0);
 
-			const compReward = (await staking.stakeOfAuto(0, deployer.address)).sub(parseUnits("200", 8));
 			await staking.setMockTime(reinvestPeriod.mul(3));
 
 			await expect(() => staking.emergencyUnstake(0)).to.changeTokenBalances(
 				tpy,
 				[deployer, staking],
-				[parseUnits("200", 8), -parseUnits("200", 8)]
+				[parseUnits("200", 8).add(compReward), -parseUnits("200", 8).add(compReward)]
 			);
 
-			expect(await staking.stakes(0, deployer.address)).to.eql([
-				constants.Zero,
-				compReward,
-				reinvestPeriod.add(reinvestPeriod.div(2)),
-				reinvestPeriod.mul(2).add(reinvestPeriod.div(2))
-			]);
-			expect((await staking.poolInfo(0)).totalStakes).to.eq(compReward);
-			expect(await staking.totalReserved()).to.eq(0);
+			expect(await staking.stakes(0, deployer.address)).to.eql([constants.Zero, constants.Zero, constants.Zero]);
+			expect((await staking.poolInfo(0)).totalStakes).to.eq(constants.Zero);
 		});
 
 		it("Should emit 'Unstake'", async function () {
@@ -575,8 +548,8 @@ describe("TPYStaking", function () {
 			await expect(staking.emergencyUnstake(0)).to.be.revertedWith("TPYStaking::Lock period don't passed!");
 		});
 
-		it("Should revert with 'TPYStaking::Insufficient reserve balance'", async function () {
-			await expect(staking.emergencyUnstake(0)).to.be.revertedWith("TPYStaking::Insufficient reserve balance");
+		it("Should revert with 'TPYStaking::No stake'", async function () {
+			await expect(staking.emergencyUnstake(0)).to.be.revertedWith("TPYStaking::No stake");
 		});
 	});
 
@@ -626,7 +599,6 @@ describe("TPYStaking", function () {
 			await staking.stake(2, parseUnits("100", 8), 0);
 
 			expect(await staking.stakes(1, deployer.address)).to.eql([
-				parseUnits("200", 8),
 				parseUnits("100", 8).add(BigNumber.from("10260001736")),
 				reinvestPeriod.mul(2),
 				reinvestPeriod.mul(4).add(reinvestPeriod.div(2))
