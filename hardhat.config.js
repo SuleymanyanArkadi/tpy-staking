@@ -23,8 +23,6 @@ require("@nomiclabs/hardhat-web3");
 // require("@nomiclabs/hardhat-solpp");
 const { removeConsoleLog } = require("hardhat-preprocessor");
 
-require("./tasks");
-
 // const getNetwork = function () {
 // 	const args = process.argv.slice(2);
 // 	const networkIndex = args.findIndex((el, i, arr) => {

@@ -1,5 +1,5 @@
 {
-    "detectors_to_exclude": "timestamp, dead-code",
-    "filter_paths": "node_modules/@openzeppelin|node_modules/@uniswap|contracts/mocks|contracts/libs|contracts/hardhat-dependency-compiler",
+    "detectors_to_exclude": "timestamp, dead-code, unchecked-transfer",
+    "filter_paths": "node_modules/@openzeppelin|node_modules/abdk-libraries-solidity|node_modules/@uniswap|contracts/mocks|contracts/libs|contracts/hardhat-dependency-compiler",
     "solc_remaps": "@openzeppelin/=$(pwd)/node_modules/@openzeppelin/ @uniswap/=$(pwd)/node_modules/@uniswap/"
 } 

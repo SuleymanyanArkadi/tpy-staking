@@ -7,11 +7,11 @@
 		"coverage": "IS_TEST_DEPLOY=true npx hardhat coverage",
 		"deploy": "npm run eslint:fix && npx hardhat deploy",
 		"verify:goerli": "npx hardhat etherscan-verify --network goerli --solc-input",
-		"deploy:goerli": "IS_TEST_DEPLOY=false npx hardhat deploy --network bsc-testnet",
+		"deploy:goerli": "IS_TEST_DEPLOY=false npx hardhat deploy --network goerli",
 		"verify:mainnet": "npx hardhat etherscan-verify --network mainnet --solc-input",
 		"node": "npx hardhat node --no-deploy",
-		"eslint": "npx eslint deploy/**/*.js test/**/*.js tasks/**/*.js utils/**/*.js",
-		"eslint:fix": "npx eslint --fix deploy/**/*.js test/**/*.js tasks/**/*.js utils/**/*.js",
+		"eslint": "npx eslint deploy/**/*.js test/**/*.js utils/**/*.js",
+		"eslint:fix": "npx eslint --fix deploy/**/*.js test/**/*.js utils/**/*.js",
 		"solhint": "solhint contracts/*.sol",
 		"size-contracts": "npx hardhat size-contracts",
 		"prettier:solidity": "./node_modules/.bin/prettier --write 'contracts/**/*.sol'",
@@ -71,6 +71,7 @@
 		"web3": "^1.7.0"
 	},
 	"dependencies": {
+		"abdk-libraries-solidity": "^3.1.0",
 		"ethereumjs-util": "^7.1.0",
 		"hardhat-local-networks-config-plugin": "^0.0.6",
 		"web3-utils": "^1.6.1"

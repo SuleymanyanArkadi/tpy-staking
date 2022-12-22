@@ -3,8 +3,9 @@
 pragma solidity 0.8.7;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "./libs/ABDKMath64x64.sol";
+import "abdk-libraries-solidity/ABDKMath64x64.sol";
 
 contract TPYStaking is AccessControl {
     /**
@@ -49,12 +50,12 @@ contract TPYStaking is AccessControl {
     mapping(address => uint256) public addressToId; // user address -> referral system ID
     mapping(uint256 => address) public idToAddress; // referral system ID -> user address
 
-    event Stake(address user, uint256 pid, uint256 amount);
-    event Unstake(address user, uint256 pid, uint256 amount);
-    event Restake(address user, uint256 pid, uint256 amount);
+    event Stake(address indexed user, uint256 indexed pid, uint256 amount);
+    event Unstake(address indexed user, uint256 indexed pid, uint256 amount);
+    event Restake(address indexed user, uint256 indexed pid, uint256 amount);
     event NewReferral(address referral, address referrer);
-    event NewPool(uint256 pid, uint256 apy, uint256 lockPeriod);
-    event PausePool(uint256 pid, uint256 pauseCheckpoint);
+    event NewPool(uint256 indexed pid, uint256 apy, uint256 lockPeriod);
+    event PausePool(uint256 indexed pid, uint256 pauseCheckpoint);
     event NewReferrerReward(uint256 referrerReward);
     event NewTreasury(address treasury);
 
@@ -110,6 +111,7 @@ contract TPYStaking is AccessControl {
      * @param newReferrerReward_: New % of referrer system reward
      */
     function setReferrerReward(uint256 newReferrerReward_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newReferrerReward_ <= 100, "TPYStaking::Referrer reward should be between 0 and 100");
         referrerReward = newReferrerReward_;
 
         emit NewReferrerReward(newReferrerReward_);
@@ -131,9 +133,9 @@ contract TPYStaking is AccessControl {
      * @param amount_ amount of tokens.
      */
     function inCaseTokensGetStuck(address token_, uint256 amount_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(address(tpy) != token_, "TPYStaking::FORBIDDEN");
+        require(address(tpy) != token_, "TPYStaking::TPY token can't be withdrawn");
 
-        require(IERC20(token_).transfer(msg.sender, amount_));
+        SafeERC20.safeTransfer(IERC20(token_), msg.sender, amount_);
     }
 
     /**
@@ -163,6 +165,10 @@ contract TPYStaking is AccessControl {
         if (userStake.amount > 0) {
             userReward = _reinvest(pid_);
         }
+        require(
+            tpy.balanceOf(address(this)) >= totalStakes() + (userReward * referrerReward) / 100,
+            "TPYStaking::Not enough tokens in contract"
+        );
 
         userStake.amount += amount_;
         userStake.checkpoint = getTime();
@@ -171,10 +177,8 @@ contract TPYStaking is AccessControl {
 
         emit Stake(msg.sender, pid_, amount_);
 
-        require(tpy.transferFrom(msg.sender, address(this), amount_));
-        if (userReward != 0) {
-            require(tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100));
-        }
+        tpy.transferFrom(msg.sender, address(this), amount_);
+        tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100);
     }
 
     /**
@@ -185,10 +189,16 @@ contract TPYStaking is AccessControl {
     function unstake(uint256 pid_, uint256 amount_) external {
         UserStake storage userStake = stakes[pid_][msg.sender];
         require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+        require(userStake.amount != 0, "TPYStaking::No stake");
 
         uint256 userReward = _reinvest(pid_);
 
         amount_ = amount_ > userStake.amount ? userStake.amount : amount_;
+
+        require(
+            tpy.balanceOf(address(this)) >= totalStakes() + (userReward * referrerReward) / 100,
+            "TPYStaking::Not enough tokens in contract"
+        );
 
         if (amount_ == userStake.amount) {
             delete stakes[pid_][msg.sender];
@@ -200,10 +210,26 @@ contract TPYStaking is AccessControl {
 
         emit Unstake(msg.sender, pid_, amount_);
 
-        require(tpy.transfer(msg.sender, amount_));
-        if (userReward != 0) {
-            require(tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100));
-        }
+        tpy.transfer(msg.sender, amount_);
+        tpy.transfer(userReferrer(msg.sender), (userReward * referrerReward) / 100);
+    }
+
+    /**
+     * @notice Emergency unstake
+     * @param pid_: Staking pool ID
+     */
+    function emergencyUnstake(uint256 pid_) external {
+        UserStake memory userStake = stakes[pid_][msg.sender];
+        require(userStake.releaseCheckpoint <= getTime(), "TPYStaking::Lock period don't passed!");
+        require(userStake.amount != 0, "TPYStaking::No stake");
+
+        uint256 amount = userStake.amount;
+        poolInfo[pid_].totalStakes -= amount;
+        delete stakes[pid_][msg.sender];
+
+        emit Unstake(msg.sender, pid_, amount);
+
+        tpy.transfer(msg.sender, amount);
     }
 
     /**
@@ -212,6 +238,15 @@ contract TPYStaking is AccessControl {
      */
     function userReferrer(address user_) public view returns (address) {
         return idToAddress[referralToReferrer[addressToId[user_]]];
+    }
+
+    /**
+     * @notice Return total stakes in all pools
+     */
+    function totalStakes() public view returns (uint256 amount) {
+        for (uint256 i = 0; i < poolInfo.length; i++) {
+            amount += poolInfo[i].totalStakes;
+        }
     }
 
     /**
@@ -238,6 +273,10 @@ contract TPYStaking is AccessControl {
         result =
             p1 +
             (((time - (passedPeriods * REINVEST_PERIOD + userStake.checkpoint)) * (p2 - p1)) / REINVEST_PERIOD);
+    }
+
+    function getTime() internal view virtual returns (uint256) {
+        return block.timestamp;
     }
 
     /**
@@ -275,9 +314,5 @@ contract TPYStaking is AccessControl {
                 ),
                 principal_
             );
-    }
-
-    function getTime() internal view virtual returns (uint256) {
-        return block.timestamp;
     }
 }
