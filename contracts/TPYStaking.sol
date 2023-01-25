@@ -39,7 +39,7 @@ contract TPYStaking is AccessControl {
     ERC20 public immutable tpy;
     uint256 public constant SECONDS_IN_YEAR = 31557600; // 365.25 days
     uint256 public constant REINVEST_PERIOD = 2629800; // 30.4 days
-    uint256 public referrerReward = 20; // 20% of user stake reward
+    uint256 public referrerReward = 0; // referrer reward
     uint256 private idCounter; // counter for referral system
 
     PoolInfo[] public poolInfo;
