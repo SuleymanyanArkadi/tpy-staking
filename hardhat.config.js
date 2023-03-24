@@ -1,39 +1,17 @@
 require("dotenv").config();
 
-require("@typechain/hardhat");
 require("@nomiclabs/hardhat-etherscan");
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-ethers");
-require("hardhat-gas-reporter");
 require("solidity-coverage");
 require("hardhat-deploy");
 require("hardhat-deploy-ethers");
 require("hardhat-contract-sizer");
-require("@openzeppelin/hardhat-upgrades");
 require("@nomiclabs/hardhat-solhint");
 require("hardhat-tracer");
-require("hardhat-spdx-license-identifier");
-require("hardhat-docgen");
-require("hardhat-dependency-compiler");
 require("@atixlabs/hardhat-time-n-mine");
 require("hardhat-local-networks-config-plugin");
-require("hardhat-log-remover");
-require("@tenderly/hardhat-tenderly");
 require("@nomiclabs/hardhat-web3");
-// require("@nomiclabs/hardhat-solpp");
-const { removeConsoleLog } = require("hardhat-preprocessor");
-
-// const getNetwork = function () {
-// 	const args = process.argv.slice(2);
-// 	const networkIndex = args.findIndex((el, i, arr) => {
-// 		return arr[i - 1] === "--network";
-// 	});
-// 	return networkIndex === -1 ? "hardhat" : args[networkIndex];
-// };
-
-// const getSolppDefs = function () {
-// 	return require("./utils/constants/solpp")(getNetwork());
-// };
 
 // You need to export an object to set up your config
 // Go to https://hardhat.org/config/ to learn more
@@ -147,13 +125,5 @@ module.exports = {
 	tenderly: {
 		project: TENDERLY_PROJECT,
 		username: TENDERLY_USERNAME
-	},
-	preprocess: {
-		eachLine: removeConsoleLog((hre) => hre.network.name !== "hardhat" && hre.network.name !== "localhost")
-	},
-	// solpp: {
-	// 	defs: getSolppDefs(),
-	// 	noPreprocessor: true,
-	// 	noFlatten: true
-	// }
+	}
 };
