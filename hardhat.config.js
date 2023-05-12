@@ -111,7 +111,23 @@ module.exports = {
 		showTimeSpent: true
 	},
 	etherscan: {
-		apiKey: ETHERSCAN_API_KEY
+		apiKey: "DYNSG3YZDTTG1X4YNJ64PWEFUNU3X3C3K8",
+		customChains: [
+			{
+				network: "arbitrum_goerli",
+				chainId: 421613,
+				urls: {
+					apiURL: "https://api-goerli.arbiscan.io/api"
+				}
+			},
+			// {
+			// 	network: "arbitrum",
+			// 	chainId: 42161,
+			// 	urls: {
+			// 		apiURL: "https://arbiscan.io/api"
+			// 	}
+			// }
+		],
 	},
 	typechain: {
 		outDir: "typechain",

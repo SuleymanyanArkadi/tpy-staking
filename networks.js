@@ -22,7 +22,7 @@ module.exports = {
 				url: `https://bsc.getblock.io/mainnet/?api_key=${process.env.FORKING_API_KEY}`
 			},
 			accounts: {
-				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
+				mnemonic: process.env.TESTNET_MNEMONIC,
 				path: "m/44'/60'/0'/0",
 				initialIndex: "0",
 				count: "20"
@@ -48,7 +48,7 @@ module.exports = {
 		goerli: {
 			chainId: 5,
 			accounts: {
-				mnemonic: "hen hair couple rose hover crush math mango private apology bid antique",
+				mnemonic: process.env.TESTNET_MNEMONIC,
 				path: "m/44'/60'/0'/0",
 				initialIndex: 0,
 				count: 20
@@ -56,7 +56,31 @@ module.exports = {
 			url: `https://eth-goerli.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
 			tags: ["testnet"],
 			deploy: ["./deploy/testnet"]
-		}
+		},
+		arbitrum_goerli: {
+			chainId: 421613,
+			accounts: {
+				mnemonic: process.env.TESTNET_MNEMONIC,
+				path: "m/44'/60'/0'/0",
+				initialIndex: 0,
+				count: 20
+			},
+			url: "https://arbitrum-goerli.public.blastapi.io",
+			tags: ["testnet"],
+			deploy: ["./deploy/testnet"]
+		},
+		arbitrum: {
+			chainId: 42161,
+			url: "https://arb1.arbitrum.io/rpc",
+			accounts: {
+				mnemonic: `${process.env.MAINNET_MNEMONIC}`,
+				path: "m/44'/60'/0'/0",
+				initialIndex: 0,
+				count: 20
+			},
+			tags: ["mainnet"],
+			deploy: ["./deploy/mainnet"]
+		  },
 	},
 	defaultConfig: {
 		gasPrice: "auto"
